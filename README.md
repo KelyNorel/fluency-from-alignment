@@ -29,7 +29,7 @@ to recognize *what* was said.
 1. **Forced alignment** (Qwen3-ForcedAligner-0.6B) → word-level timestamps, used where
    speech aligns cleanly (word counts, timing on fluent speech).
 2. **Pause & timing features** from energy-based VAD: pause count, pause durations,
-   silence ratio, articulation rate, speech rate, onset latency, long-pause count.
+   silence ratio, articulation/speech rate, phonation ratio, onset latency, long-pause count.
 3. **Validation** against 5-expert human fluency scores (Spearman); interpretable model +
    SHAP to identify which timing features drive the human rating.
 
@@ -42,8 +42,10 @@ to recognize *what* was said.
 | Alignment vs ASR | Forced alignment (text known) | Read-aloud task — reference text is known, so skip ASR and its transcription errors |
 | Pause measurement | Energy-based VAD, not alignment timestamps | Forced alignment breaks on disfluent speech; VAD is text-independent and stays robust |
 | Fluency target | Continuous 0–10, Spearman validation | Labels are heavily skewed (~82% score 7–10); accuracy would reward a "predict high" baseline |
+| Edge silence | Trimmed before rate/ratio features | Leading/trailing silence depends on when *record* was pressed — a recording artifact, not fluency |
+| Word counts for rates | From known reference text, not the aligner | Text is known, so word count is reliable even where alignment fails |
 | Aligner model | Qwen3-ForcedAligner-0.6B | Word-level timestamps, surpasses WhisperX/MFA in accuracy; runs on Apple Silicon |
-| Pause threshold | 250 ms minimum | Standard threshold in the fluency literature |
+| Pause threshold | 250 ms min (500 ms = "long pause") | Standard thresholds in the fluency literature |
 | VAD threshold | Adaptive (per-utterance p10–p90) | Adapts to each recording's gain instead of a fixed global cutoff |
 
 ---
@@ -61,12 +63,22 @@ silence at all — it was speech the aligner failed to place:
 
 ![Alignment fails on disfluent speech](figures/alignment_fails_on_disfluent.png)
 
-The failure is systematic, not incidental: on the low-fluency group (fluency ≤ 3), trailing
-"silence" averaged 2.15 s vs 0.52 s for fluent speech, and zero-duration words (tokens the
-aligner couldn't place) averaged 1.73 vs 0.27.
+The failure is systematic, not incidental. Measured across all 2,500 training utterances,
+every alignment-failure signal — trailing "silence", zero-duration words, and utterance
+duration — falls monotonically as human fluency rises:
 
-So we measure pauses directly from the audio with energy-based VAD, which recovers the
-speech the aligner missed and detects the real pauses (red) regardless of what was said:
+![Alignment degrades as fluency drops](figures/alignment_degradation_by_fluency.png)
+
+So we measure pauses directly from the audio using **energy-based Voice Activity Detection
+(VAD)** — a technique that labels each short frame of audio as speech or silence based on
+its energy (loudness), without needing to know what words were spoken. Concretely: we split
+the audio into 25 ms frames, compute each frame's RMS energy, and threshold it (adaptively,
+per utterance) into speech vs. silence. Silence stretches longer than 250 ms that fall
+*between* speech are counted as pauses.
+
+Because VAD looks only at the audio signal and not at any reference text, it stays reliable
+on disfluent speech — it recovers the speech the aligner missed and detects the real pauses
+(red) regardless of what was said:
 
 ![VAD recovers the speech the aligner missed](figures/vad_recovers_disfluent_speech.png)
 
@@ -81,8 +93,8 @@ which sets the modeling choice — continuous target validated with Spearman, wi
 low-fluency tail as the region of interest.
 
 ### Notebook 02 — Forced alignment & the case for VAD
-Run Qwen3 forced alignment on individual utterances and show it degrades systematically
-on disfluent speech, motivating the switch to energy-based VAD for pause measurement.
+Run Qwen3 forced alignment and show it degrades systematically on disfluent speech (across
+the full training set), motivating the switch to energy-based VAD for pause measurement.
 
 ---
 
@@ -121,7 +133,7 @@ pip install "git+https://github.com/huggingface/transformers"
 - **HuggingFace Transformers** — model loading and inference
 - **HuggingFace datasets** — speechocean762 loading
 - **PyTorch + MPS** — inference on Apple Silicon
-- **NumPy** — energy-based VAD and pause detection
+- **NumPy** — energy-based Voice Activity Detection (VAD) and pause detection
 - **scikit-learn** — interpretable fluency model
 - **SHAP** — feature attribution for the human fluency rating
 - **matplotlib** — visualization
@@ -137,6 +149,7 @@ pip install "git+https://github.com/huggingface/transformers"
 - **Label skew:** Very few low-fluency examples (~5% score ≤ 4), which limits how finely the model can learn the disfluent end of the scale.
 
 ---
+
 
 ## Project Structure
 ```
