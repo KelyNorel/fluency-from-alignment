@@ -63,7 +63,7 @@ silence at all — it was speech the aligner failed to place:
 
 The failure is systematic, not incidental. Measured across all 2,500 training utterances,
 every alignment-failure signal — trailing "silence", zero-duration words, and utterance
-duration — falls monotonically as human fluency rises:
+duration — is highest among the least-fluent speakers and falls steadily as fluency rises:
 
 ![Alignment degrades as fluency drops](figures/alignment_degradation_by_fluency.png)
 
@@ -96,6 +96,7 @@ features cluster between ρ = −0.53 and −0.59; onset latency barely matters 
 
 ### But nine features are really about three things
 
+Because of this, we drop it, leaving nine features for the model.
 The features are highly collinear — the six pause features are near-duplicates of one
 another (ρ up to 0.99):
 
@@ -193,23 +194,14 @@ pip install "git+https://github.com/huggingface/transformers"
 ## Project Structure
 ```
 fluency-from-alignment/
-
 ├── notebooks/
-
 │   ├── 01_explore_data.ipynb         # dataset exploration + fluency target distribution
-
 │   ├── 02_forced_alignment.ipynb     # forced alignment + the case for VAD
-
 │   ├── 03_features.ipynb             # VAD-based fluency features + correlations
-
 │   └── 04_model_shap.ipynb           # model, collinearity analysis, feature reduction
-
 ├── figures/                          # committed plots used in this README
-
 ├── data/                             # not tracked in git (dataset cache, feature parquets)
-
 ├── requirements.txt
-
 └── README.md
 ```
 ---
